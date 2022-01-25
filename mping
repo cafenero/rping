@@ -6,15 +6,17 @@ import subprocess
 from argparse import ArgumentParser
 from datetime import datetime
 
+CLEAR_LINE_NUME = 128
+
 
 def initClearScreen():
-    for i in range(0, 100):
+    for i in range(0, CLEAR_LINE_NUME):
         print("                \
                                \
                                \
                                \
                                ")
-    print("\033[100A", end="")
+    print("\033[" + str(CLEAR_LINE_NUME) + "A", end="")
 
 
 def getTime(str):
