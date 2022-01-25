@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+import time
+import re
+import sys
+import subprocess
+from argparse import ArgumentParser
+
+
+def initClearScreen():
+    for i in range(0, 100):
+        print("                \
+                               \
+                               \
+                               \
+                               ")
+    print("\033[100A", end="")
+
+
+def getTime(str):
+    # sample: 64 bytes from 192.168.3.20: icmp_seq=1 ttl=64 time=0.071 ms
+    pattern = '.*time=(.*)'
+    result = re.match(pattern, str.split("\n")[1])
+    if result:
+        return result.group(1)
+    return "Can't get time"
+
+
+def getFileContent(path):
+    with open(path) as f:
+        ret = [s.strip() for s in f.readlines()]
+    return ret
+
+
+def get_option():
+    arg = ArgumentParser()
+    arg.add_argument('-i', '--interval', type=float, default=1,
+                     help='ping interval')
+    arg.add_argument('-t', '--target', '--targets', nargs='*',
+                     help="specify ping targets")
+    arg.add_argument('-f', '--file', type=str, default="",
+                     help='file')
+    return arg.parse_args()
+
+
+if __name__ == '__main__':
+    args = get_option()
+    interval = args.interval
+
+    targets = ""
+    if args.target:
+        targets = args.target
+    if args.file:
+        filepath = args.file
+        targets = getFileContent(filepath)
+
+    if targets == "":
+        print("CLI example:")
+        print(" main.py -t example.com")
+        print(" main.py -f hosts.txt")
+        exit()
+
+    initClearScreen()
+    count = 1
+    try:
+        while True:
+            print("> Ping check: count: " + str(count) + ' interval : '
+                  + str(interval) + ", " + '{:.2f}'.format(1/interval)
+                  + " [ping per sec]")
+            for target in targets:
+                res = subprocess.run(
+                    ["ping", target, "-c", "1", "-W", "300"],
+                    stdout=subprocess.PIPE)
+                if res.returncode == 0:
+                    print(target + " " + getTime(res.stdout.decode("utf-8")))
+                else:
+                    print(target + " NG")
+            print("\033[100A", end="")
+            time.sleep(interval)
+            count = count + 1
+            if count % 10 == 0:
+                initClearScreen()
+    except KeyboardInterrupt:
+        print("                ")
+        print("\033[10A", end="")
+        sys.exit()
