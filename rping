@@ -4,6 +4,7 @@ import re
 import sys
 import subprocess
 from argparse import ArgumentParser
+from datetime import datetime
 
 
 def initClearScreen():
@@ -39,11 +40,22 @@ def get_option():
                      help="specify ping targets")
     arg.add_argument('-f', '--file', type=str, default="",
                      help='file')
+    arg.add_argument('-d', '--debug', action='store_true',  default="")
     return arg.parse_args()
 
 
+def d_printTimeDelta():
+    if debug:
+        date_now = datetime.now()
+        print(date_now - date_before)
+        return date_now
+
+
+debug = ""
+
 if __name__ == '__main__':
     args = get_option()
+
     interval = args.interval
 
     targets = ""
@@ -59,10 +71,17 @@ if __name__ == '__main__':
         print(" main.py -f hosts.txt")
         exit()
 
+    debug = args.debug
+
     initClearScreen()
     count = 1
+    if debug:
+        date_before = datetime.now()
     try:
         while True:
+            if debug:
+                date_before = d_printTimeDelta()
+
             print("> Ping check: count: " + str(count) + ' interval : '
                   + str(interval) + ", " + '{:.2f}'.format(1/interval)
                   + " [ping per sec]")
