@@ -8,6 +8,13 @@ from datetime import datetime
 
 CLEAR_LINE_NUME = 128
 
+pattern = '.*time=(.*)'
+debug = ""
+result = {}
+max_targets_len = 0
+targets = ""
+count = 1
+
 
 def initClearScreen():
     for i in range(0, CLEAR_LINE_NUME):
@@ -19,9 +26,42 @@ def initClearScreen():
     print("\033[" + str(CLEAR_LINE_NUME) + "A", end="")
 
 
+def sort_uniq_target():
+    global targets
+    targets = set(targets)
+    targets = sorted(targets)
+
+
+def set_target_len_max():
+    global targets
+    global max_targets_len
+    for f in targets:
+        if len(f) > max_targets_len:
+            max_targets_len = len(f)
+
+
+def init_result():
+    global targets
+    for target in targets:
+        result[target] = {"lastsec": 0, "avgsec": 0, "maxsec": 0.0,
+                          "minsec": 0, "totalsec": 0, "succ": 0, "fail": 0}
+
+
+def init_target_and_result():
+    sort_uniq_target()
+    set_target_len_max()
+    init_result()
+
+
+def ping_target(target):
+    return subprocess.run(
+        ["ping", target, "-c", "1", "-W", "300"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+
+
 def getTime(str):
     # sample: 64 bytes from 192.168.3.20: icmp_seq=1 ttl=64 time=0.071 ms
-    pattern = '.*time=(.*)'
     result = re.match(pattern, str.split("\n")[1])
     if result:
         return result.group(1)
@@ -46,6 +86,36 @@ def get_option():
     return arg.parse_args()
 
 
+def update_result(t, res, count):
+    if res.returncode == 0:
+        sec_unit = getTime(res.stdout.decode("utf-8")).split(" ")
+        sec_unit[0] = float(sec_unit[0])
+        if sec_unit[1] == "ms":
+            pass
+        elif sec_unit[1] == "s":
+            sec_unit[0] = sec_unit[0] * 1000.0
+        elif sec_unit[1] == "us":
+            sec_unit[0] = sec_unit[0] / 1000.0
+        elif sec_unit[1] == "ns":
+            sec_unit[0] = sec_unit[0] / 1000.0 / 1000.0
+        else:
+            print("sec unit error")
+            exit(1)
+
+        if result[t]["maxsec"] < sec_unit[0]:
+            result[t]["maxsec"] = sec_unit[0]
+        if (result[t]["minsec"] == 0) or (result[t]["minsec"] > sec_unit[0]):
+            result[t]["minsec"] = sec_unit[0]
+
+        result[t]["lastsec"] = sec_unit[0]
+        result[t]["succ"] = result[t]["succ"] + 1
+        result[t]["totalsec"] = result[t]["totalsec"] + sec_unit[0]
+        result[t]["avgsec"] = result[t]["totalsec"] / count
+    else:
+        result[t]["fail"] = result[t]["fail"] + 1
+        result[t]["lastsec"] = 0
+
+
 def d_printTimeDelta():
     if debug:
         date_now = datetime.now()
@@ -53,30 +123,53 @@ def d_printTimeDelta():
         return date_now
 
 
-debug = ""
+def print_formated_header():
+    print("> count: " + str(count) + ' interval: '
+          + str(interval) + ", " + '{:.2f}'.format(1/interval)
+          + " [ping per sec]")
+
+
+def print_formated_result(result):
+    temp = "{0:>" + str(max_targets_len) + \
+        "s}{1:>6s}{2:>6s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}"
+    print(temp.format("Hostname", "Succ", "Fail",
+                      "Last", "Avg", "Max", "Min"))
+    for k, v in result.items():
+        result_msg = ""
+        temp = "%"+str(max_targets_len)+"s"
+        result_msg = result_msg + temp % k
+        result_msg = result_msg + '%6d' % result[k]["succ"]
+        result_msg = result_msg + '%6d' % result[k]["fail"]
+        result_msg = result_msg + '%10.3f' % result[k]["lastsec"]
+        result_msg = result_msg + "ms"
+        result_msg = result_msg + '%10.3f' % result[k]["avgsec"]
+        result_msg = result_msg + "ms"
+        result_msg = result_msg + '%10.3f' % result[k]["maxsec"]
+        result_msg = result_msg + "ms"
+        result_msg = result_msg + '%10.3f' % result[k]["minsec"]
+        result_msg = result_msg + "ms"
+        print(result_msg)
+    print("\033[100A", end="")
+
 
 if __name__ == '__main__':
     args = get_option()
-
+    debug = args.debug
     interval = args.interval
-
-    targets = ""
     if args.target:
         targets = args.target
     if args.file:
         filepath = args.file
         targets = getFileContent(filepath)
-
     if targets == "":
         print("CLI example:")
         print(" main.py -t example.com")
         print(" main.py -f hosts.txt")
         exit()
 
-    debug = args.debug
-
+    init_target_and_result()
     initClearScreen()
-    count = 1
+
     if debug:
         date_before = datetime.now()
     try:
@@ -84,18 +177,12 @@ if __name__ == '__main__':
             if debug:
                 date_before = d_printTimeDelta()
 
-            print("> Ping check: count: " + str(count) + ' interval : '
-                  + str(interval) + ", " + '{:.2f}'.format(1/interval)
-                  + " [ping per sec]")
+            print_formated_header()
             for target in targets:
-                res = subprocess.run(
-                    ["ping", target, "-c", "1", "-W", "300"],
-                    stdout=subprocess.PIPE)
-                if res.returncode == 0:
-                    print(target + " " + getTime(res.stdout.decode("utf-8")))
-                else:
-                    print(target + " NG")
-            print("\033[100A", end="")
+                res = ping_target(target)
+                update_result(target, res, count)
+            print_formated_result(result)
+
             time.sleep(interval)
             count = count + 1
             if count % 10 == 0:
