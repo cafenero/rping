@@ -5,15 +5,18 @@ import sys
 import subprocess
 from argparse import ArgumentParser
 from datetime import datetime
+from rich.console import Console
+from rich.table import Table
 
 CLEAR_LINE_NUME = 128
-
+PADDING = 1
 pattern = '.*time=(.*)'
-debug = ""
+ndebug = ""
 result = {}
 max_targets_len = 0
 targets = ""
 count = 1
+console = Console()
 
 
 def initClearScreen():
@@ -37,7 +40,7 @@ def set_target_len_max():
     global max_targets_len
     for f in targets:
         if len(f) > max_targets_len:
-            max_targets_len = len(f)
+            max_targets_len = len(f) + PADDING
 
 
 def init_result():
@@ -108,11 +111,11 @@ def update_result(t, res, count):
             result[t]["minsec"] = sec_unit[0]
 
         result[t]["lastsec"] = sec_unit[0]
-        result[t]["succ"] = result[t]["succ"] + 1
+        result[t]["succ"] += 1
         result[t]["totalsec"] = result[t]["totalsec"] + sec_unit[0]
         result[t]["avgsec"] = result[t]["totalsec"] / count
     else:
-        result[t]["fail"] = result[t]["fail"] + 1
+        result[t]["fail"] += 1
         result[t]["lastsec"] = 0
 
 
@@ -129,26 +132,89 @@ def print_formated_header():
           + " [ping per sec]")
 
 
-def print_formated_result(result):
-    temp = "{0:>" + str(max_targets_len) + \
-        "s}{1:>6s}{2:>6s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}"
-    print(temp.format("Hostname", "Succ", "Fail",
-                      "Last", "Avg", "Max", "Min"))
+def calc_total(result):
+    total = {"succ": 0, "fail": 0, "last": 0, "avg": 0, "max": 0, "min": 0}
+    temp_max = None
+    temp_min = None
     for k, v in result.items():
-        result_msg = ""
-        temp = "%"+str(max_targets_len)+"s"
-        result_msg = result_msg + temp % k
-        result_msg = result_msg + '%6d' % result[k]["succ"]
-        result_msg = result_msg + '%6d' % result[k]["fail"]
-        result_msg = result_msg + '%10.3f' % result[k]["lastsec"]
-        result_msg = result_msg + "ms"
-        result_msg = result_msg + '%10.3f' % result[k]["avgsec"]
-        result_msg = result_msg + "ms"
-        result_msg = result_msg + '%10.3f' % result[k]["maxsec"]
-        result_msg = result_msg + "ms"
-        result_msg = result_msg + '%10.3f' % result[k]["minsec"]
-        result_msg = result_msg + "ms"
-        print(result_msg)
+        total["succ"] = total["succ"] + result[k]["succ"]
+        total["fail"] = total["fail"] + result[k]["fail"]
+        total["avg"] = total["avg"] + result[k]["avgsec"]
+        total["last"] = total["last"] + result[k]["lastsec"]
+        # max
+        if temp_max is None or temp_max < result[k]["maxsec"]:
+            temp_max = result[k]["maxsec"]
+        # min
+        if result[k]["minsec"] == 0:
+            continue
+        if temp_min is None or temp_min > result[k]["minsec"]:
+            temp_min = result[k]["minsec"]
+    total["max"] = mod_sec_format_and_unit(temp_max)
+    total["min"] = mod_sec_format_and_unit(temp_min)
+    total["avg"] = mod_sec_format_and_unit(total["avg"] / len(result))
+    total["last"] = mod_sec_format_and_unit((total["last"] / len(result)))
+    total["fail"] = get_fail_to_red(total["fail"])
+    return total
+
+
+def mod_sec_format_and_unit(sec):
+    if sec == 0:
+        ret = ('%10s' % "[red bold]N/A[/red bold]")
+    else:
+        if 1000 <= sec:
+            ret = ('%10.3f' % (sec / 1000) + "[red bold]s[red bold]")
+        elif 0.001 <= sec and sec < 1000:
+            ret = ('%10.3f' % sec + "[green bold]ms[/green bold]")
+        elif 0.000001 <= sec and sec < 0.001:
+            ret = ('%10.3f' % (sec * 1000) + "[blue bold]us[/blue bold]")
+        elif (0.000000001 <= sec and
+              sec < 0.000001):
+            ret = ('%10.3f' % (sec * 1000 * 1000) +
+                   "[cyan bold]ns[/cyan bold]")
+        else:
+            print(sec)
+            print("sec unit error")
+            exit(1)
+    return ret
+
+
+def get_fail_to_red(num):
+    if num > 0:
+        return '%6s' % ("[red bold]" + str(num) + "[/red bold]")
+    return '%6s' % str(num)
+
+
+def get_formated_result_line(k, result, table):
+    # # debug
+    # result[k]["lastsec"] = result[k]["lastsec"] * 1000
+    # result[k]["lastsec"] = result[k]["lastsec"] / 1000
+    # result[k]["lastsec"] = result[k]["lastsec"] / 1000 / 1000
+    return table.add_row(
+        k,
+        '%6d' % result[k]["succ"],
+        get_fail_to_red(result[k]["fail"]),
+        mod_sec_format_and_unit(result[k]["lastsec"]),
+        mod_sec_format_and_unit(result[k]["avgsec"]),
+        mod_sec_format_and_unit(result[k]["maxsec"]),
+        mod_sec_format_and_unit(result[k]["minsec"])
+    )
+
+
+def print_formated_result(result):
+    total = calc_total(result)
+    table = Table(show_header=True, header_style="bold magenta")
+    table.show_footer = True
+    table.add_column("Hostname", "# of hosts: " + str(len(result)),
+                     justify="right")
+    table.add_column("Succ", str(total["succ"]), justify="right")
+    table.add_column("Fail", str(total["fail"]), justify="right")
+    table.add_column("Last", str(total["last"]), justify="right")
+    table.add_column("Avg", str(total["avg"]), justify="right")
+    table.add_column("Max", str(total["max"]), justify="right")
+    table.add_column("Min", str(total["min"]), justify="right")
+    for k, v in result.items():
+        get_formated_result_line(k, result, table)
+    console.print(table)
     print("\033[100A", end="")
 
 
@@ -184,9 +250,9 @@ if __name__ == '__main__':
             print_formated_result(result)
 
             time.sleep(interval)
-            count = count + 1
-            if count % 10 == 0:
-                initClearScreen()
+            count += 1
+            # if count % 10 == 0:
+            #     initClearScreen()
     except KeyboardInterrupt:
         print("                ")
         print("\033[10A", end="")
