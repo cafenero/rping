@@ -89,31 +89,45 @@ def get_option():
     return arg.parse_args()
 
 
+def is_num(s):
+    try:
+        float(s)
+    except ValueError:
+        return False
+    else:
+        return True
+
+
 def update_result(t, res, count):
     if res.returncode == 0:
         sec_unit = getTime(res.stdout.decode("utf-8")).split(" ")
-        sec_unit[0] = float(sec_unit[0])
-        if sec_unit[1] == "ms":
-            pass
-        elif sec_unit[1] == "s":
-            sec_unit[0] = sec_unit[0] * 1000.0
-        elif sec_unit[1] == "us":
-            sec_unit[0] = sec_unit[0] / 1000.0
-        elif sec_unit[1] == "ns":
-            sec_unit[0] = sec_unit[0] / 1000.0 / 1000.0
+        if is_num(sec_unit[0]):
+            sec_unit[0] = float(sec_unit[0])
+            if sec_unit[1] == "ms":
+                pass
+            elif sec_unit[1] == "s":
+                sec_unit[0] = sec_unit[0] * 1000.0
+            elif sec_unit[1] == "us":
+                sec_unit[0] = sec_unit[0] / 1000.0
+            elif sec_unit[1] == "ns":
+                sec_unit[0] = sec_unit[0] / 1000.0 / 1000.0
+            else:
+                print("hoge")
+                print("sec unit error")
+                exit(1)
+
+            if result[t]["maxsec"] < sec_unit[0]:
+                result[t]["maxsec"] = sec_unit[0]
+            if (result[t]["minsec"] == 0 or result[t]["minsec"] > sec_unit[0]):
+                result[t]["minsec"] = sec_unit[0]
+
+            result[t]["lastsec"] = sec_unit[0]
+            result[t]["succ"] += 1
+            result[t]["totalsec"] = result[t]["totalsec"] + sec_unit[0]
+            result[t]["avgsec"] = result[t]["totalsec"] / count
         else:
-            print("sec unit error")
-            exit(1)
-
-        if result[t]["maxsec"] < sec_unit[0]:
-            result[t]["maxsec"] = sec_unit[0]
-        if (result[t]["minsec"] == 0) or (result[t]["minsec"] > sec_unit[0]):
-            result[t]["minsec"] = sec_unit[0]
-
-        result[t]["lastsec"] = sec_unit[0]
-        result[t]["succ"] += 1
-        result[t]["totalsec"] = result[t]["totalsec"] + sec_unit[0]
-        result[t]["avgsec"] = result[t]["totalsec"] / count
+            result[t]["fail"] += 1
+            result[t]["lastsec"] = 0
     else:
         result[t]["fail"] += 1
         result[t]["lastsec"] = 0
@@ -158,8 +172,10 @@ def calc_total(result):
 
 
 def mod_sec_format_and_unit(sec):
-    if sec == 0:
-        ret = ('%10s' % "[red bold]N/A[/red bold]")
+    if sec == 0 or not is_num(sec):
+        ret = "[red bold]"
+        ret += ('%12s' % "N/A")
+        ret += "[/red bold]"
     else:
         if 1000 <= sec:
             ret = ('%10.3f' % (sec / 1000) + "[red bold]s[red bold]")
@@ -180,7 +196,10 @@ def mod_sec_format_and_unit(sec):
 
 def get_fail_to_red(num):
     if num > 0:
-        return '%6s' % ("[red bold]" + str(num) + "[/red bold]")
+        ret = "[red bold]"
+        ret += ('%6s' % str(num))
+        ret += "[/red bold]"
+        return ret
     return '%6s' % str(num)
 
 
