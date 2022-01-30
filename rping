@@ -107,6 +107,8 @@ def get_option():
 
 
 def is_num(s):
+    if s is None:
+        return False
     try:
         float(s)
     except ValueError:
