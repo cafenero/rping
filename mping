@@ -3,6 +3,7 @@
 import time
 import re
 import sys
+import os
 import subprocess
 import socket
 from socket import AF_INET, SOCK_DGRAM
@@ -279,6 +280,15 @@ def nslookup(hostname):
             return sockaddr[0]
 
 
+def check_target(filepath):
+    global targets
+    if targets == "":
+        print_help_exit()
+    if len(targets) == 0:
+        print("Empty file:", filepath)
+        exit(1)
+
+
 if __name__ == '__main__':
     args = get_option()
     debug = args.debug
@@ -287,9 +297,12 @@ if __name__ == '__main__':
         targets = args.target
     if args.file:
         filepath = args.file
-        targets = getFileContent(filepath)
-    if targets == "":
-        print_help_exit()
+        if os.path.exists(filepath):
+            targets = getFileContent(filepath)
+        else:
+            print("No valid filepath:", filepath)
+            exit(1)
+    check_target(filepath)
     init_target_and_result()
     initClearScreen()
 
