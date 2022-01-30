@@ -15,6 +15,7 @@ from rich.table import Table
 CLEAR_LINE_NUME = 128
 PADDING = 1
 pattern = '.*time=(.*)'
+COMMENT_OUT_PATTERN = '^[#|/].*'
 ndebug = ""
 result = {}
 max_targets_len = 0
@@ -39,6 +40,15 @@ def sort_uniq_target():
     targets = sorted(targets)
 
 
+def exept_comment_out_hosts():
+    global targets
+    temp_targets = []
+    for i in targets:
+        if not re.match(COMMENT_OUT_PATTERN, i):
+            temp_targets.append(i)
+    targets = temp_targets
+
+
 def set_target_len_max():
     global targets
     global max_targets_len
@@ -57,6 +67,7 @@ def init_result():
 
 
 def init_target_and_result():
+    exept_comment_out_hosts()
     sort_uniq_target()
     set_target_len_max()
     init_result()
