@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import time
 import re
 import sys
@@ -67,8 +68,8 @@ def getTime(str):
     # sample: 64 bytes from 192.168.3.20: icmp_seq=1 ttl=64 time=0.071 ms
     result = re.match(pattern, str.split("\n")[1])
     if result:
-        return result.group(1)
-    return "Can't get time"
+        return result.group(1).split(" ")
+    return None
 
 
 def getFileContent(path):
@@ -100,8 +101,8 @@ def is_num(s):
 
 def update_result(t, res, count):
     if res.returncode == 0:
-        sec_unit = getTime(res.stdout.decode("utf-8")).split(" ")
-        if is_num(sec_unit[0]):
+        sec_unit = getTime(res.stdout.decode("utf-8"))
+        if sec_unit:
             sec_unit[0] = float(sec_unit[0])
             if sec_unit[1] == "ms":
                 pass
@@ -112,7 +113,8 @@ def update_result(t, res, count):
             elif sec_unit[1] == "ns":
                 sec_unit[0] = sec_unit[0] / 1000.0 / 1000.0
             else:
-                print("hoge")
+                print(res.stdout.decode("utf-8"))
+                print(sec_unit)
                 print("sec unit error")
                 exit(1)
 
@@ -142,8 +144,8 @@ def d_printTimeDelta():
 
 def print_formated_header():
     print("> count: " + str(count) + ' interval: '
-          + str(interval) + ", " + '{:.2f}'.format(1/interval)
-          + " [ping per sec]")
+          + str(interval) + " [sec], " + '{:.2f}'.format(1/interval)
+          + " [ping/sec]")
 
 
 def calc_total(result):
@@ -167,7 +169,7 @@ def calc_total(result):
     total["min"] = mod_sec_format_and_unit(temp_min)
     total["avg"] = mod_sec_format_and_unit(total["avg"] / len(result))
     total["last"] = mod_sec_format_and_unit((total["last"] / len(result)))
-    total["fail"] = get_fail_to_red(total["fail"])
+    total["fail"] = set_fail_to_red(total["fail"])
     return total
 
 
@@ -188,13 +190,14 @@ def mod_sec_format_and_unit(sec):
             ret = ('%10.3f' % (sec * 1000 * 1000) +
                    "[cyan bold]ns[/cyan bold]")
         else:
+            print(res.stdout.decode("utf-8"))
             print(sec)
             print("sec unit error")
             exit(1)
     return ret
 
 
-def get_fail_to_red(num):
+def set_fail_to_red(num):
     if num > 0:
         ret = "[red bold]"
         ret += ('%6s' % str(num))
@@ -203,19 +206,15 @@ def get_fail_to_red(num):
     return '%6s' % str(num)
 
 
-def get_formated_result_line(k, result, table):
-    # # debug
-    # result[k]["lastsec"] = result[k]["lastsec"] * 1000
-    # result[k]["lastsec"] = result[k]["lastsec"] / 1000
-    # result[k]["lastsec"] = result[k]["lastsec"] / 1000 / 1000
+def get_formated_result_line(k, v, table):
     return table.add_row(
         k,
-        '%6d' % result[k]["succ"],
-        get_fail_to_red(result[k]["fail"]),
-        mod_sec_format_and_unit(result[k]["lastsec"]),
-        mod_sec_format_and_unit(result[k]["avgsec"]),
-        mod_sec_format_and_unit(result[k]["maxsec"]),
-        mod_sec_format_and_unit(result[k]["minsec"])
+        '%6d' % v["succ"],
+        set_fail_to_red(v["fail"]),
+        mod_sec_format_and_unit(v["lastsec"]),
+        mod_sec_format_and_unit(v["avgsec"]),
+        mod_sec_format_and_unit(v["maxsec"]),
+        mod_sec_format_and_unit(v["minsec"])
     )
 
 
@@ -232,9 +231,16 @@ def print_formated_result(result):
     table.add_column("Max", str(total["max"]), justify="right")
     table.add_column("Min", str(total["min"]), justify="right")
     for k, v in result.items():
-        get_formated_result_line(k, result, table)
+        get_formated_result_line(k, v, table)
     console.print(table)
     print("\033[100A", end="")
+
+
+def print_help_exit():
+    print("CLI example:")
+    print(" main.py -t example.com")
+    print(" main.py -f hosts.txt")
+    exit()
 
 
 if __name__ == '__main__':
@@ -247,11 +253,7 @@ if __name__ == '__main__':
         filepath = args.file
         targets = getFileContent(filepath)
     if targets == "":
-        print("CLI example:")
-        print(" main.py -t example.com")
-        print(" main.py -f hosts.txt")
-        exit()
-
+        print_help_exit()
     init_target_and_result()
     initClearScreen()
 
