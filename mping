@@ -4,6 +4,9 @@ import time
 import re
 import sys
 import subprocess
+import socket
+from socket import AF_INET, SOCK_DGRAM
+import ipaddress
 from argparse import ArgumentParser
 from datetime import datetime
 from rich.console import Console
@@ -47,8 +50,10 @@ def set_target_len_max():
 def init_result():
     global targets
     for target in targets:
+        ipaddress = nslookup(target)
         result[target] = {"lastsec": 0, "avgsec": 0, "maxsec": 0.0,
-                          "minsec": 0, "totalsec": 0, "succ": 0, "fail": 0}
+                          "minsec": 0, "totalsec": 0, "succ": 0, "fail": 0,
+                          "ipaddress": ipaddress}
 
 
 def init_target_and_result():
@@ -207,8 +212,15 @@ def set_fail_to_red(num):
 
 
 def get_formated_result_line(k, v, table):
+    hostname_field = ""
+    try:
+        if ipaddress.ip_address(k):
+            hostname_field = k
+    except ValueError:
+        # if is not address, throw & catch exception.
+        hostname_field = k + " (" + v["ipaddress"] + ")"
     return table.add_row(
-        k,
+        hostname_field,
         '%6d' % v["succ"],
         set_fail_to_red(v["fail"]),
         mod_sec_format_and_unit(v["lastsec"]),
@@ -241,6 +253,17 @@ def print_help_exit():
     print(" main.py -t example.com")
     print(" main.py -f hosts.txt")
     exit()
+
+
+def nslookup(hostname):
+    try:
+        res = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        print("Invalid hostname:", hostname)
+        exit(1)
+    for family, kind, proto, canonical, sockaddr in res:
+        if family == AF_INET and kind == SOCK_DGRAM:
+            return sockaddr[0]
 
 
 if __name__ == '__main__':
