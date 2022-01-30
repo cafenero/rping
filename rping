@@ -143,7 +143,7 @@ def update_result(t, res, count):
 def d_printTimeDelta():
     if debug:
         date_now = datetime.now()
-        print(date_now - date_before)
+        print("Elapsed delta:", date_now - date_before, "[s]")
         return date_now
 
 
@@ -285,6 +285,7 @@ if __name__ == '__main__':
     try:
         while True:
             if debug:
+                print(args)
                 date_before = d_printTimeDelta()
 
             print_formated_header()
