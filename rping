@@ -132,6 +132,8 @@ def get_option():
     arg.add_argument('-f', '--file', type=str, default="",
                      help='file')
     arg.add_argument('-d', '--debug', action='store_true',  default="")
+    arg.add_argument('-s', '--sync', action='store_true',  default="",
+                     help='Sync ping response')
     return arg.parse_args()
 
 
@@ -361,6 +363,9 @@ def ping_loop(executor):
             for target in targets:
                 future.append(
                     executor.submit(ping_and_update_result, target, count))
+            if sync:
+                for f in future:
+                    f.result()
             print_formated_result(result)
             time.sleep(interval)
             count += 1
@@ -375,6 +380,7 @@ if __name__ == '__main__':
     args = get_option()
     Debug = args.debug
     interval = args.interval
+    sync = args.sync
     if args.target:
         targets = args.target
     if args.file:
