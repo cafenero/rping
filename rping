@@ -23,13 +23,13 @@ FLAG_PING_LOOP_END = False
 pattern = '.*time=(.*)'
 COMMENT_OUT_PATTERN = r'^[#|/].*'
 WHITESPACE_PATTERN = r"^\s*$"
-debug = ""
+Debug = False
 result = {}
 max_targets_len = 0
 targets = ""
 count = 1
 console = Console()
-date_before = ""
+Debug_date_before = None
 
 
 def initClearScreen():
@@ -94,6 +94,12 @@ def init_target_and_result():
     sort_uniq_target()
     set_target_len_max()
     init_result()
+
+
+def ping_and_update_result(target, count):
+    res = ping_target(target)
+    update_result(target, res, count)
+    return ""
 
 
 def ping_target(target):
@@ -176,12 +182,17 @@ def update_result(t, res, count):
         result[t]["lastsec"] = 0
 
 
-def d_printTimeDelta():
-    global date_before
-    if debug:
+def debug_printTimeDelta():
+    global Debug
+    global Debug_date_before
+    if Debug:
         date_now = datetime.now()
-        print("Elapsed delta:", date_now - date_before, "[s]")
-        return date_now
+        if Debug_date_before is None:
+            print("Elapsed delta:")
+            pass
+        else:
+            print("Elapsed delta:", date_now - Debug_date_before, "[s]")
+        Debug_date_before = date_now
 
 
 def print_formated_header():
@@ -328,6 +339,7 @@ def get_key_input(fd):
                 # RESET_RESULT_FLAG = True
             elif ch == "r":
                 initClearScreen()
+                debug_printTimeDelta()
                 print_formated_result(result)
             elif ch == "Q":
                 # future.cancelled()
@@ -338,18 +350,17 @@ def get_key_input(fd):
         termios.tcsetattr(fd, termios.TCSANOW, old)
 
 
-def ping_loop():
+def ping_loop(executor):
     count = 1
     while True:
         if FLAG_PING_LOOP_END:
             break
-        # if debug:
-        #     print(args)
-        #     date_before = d_printTimeDelta()
+        debug_printTimeDelta()
         try:
+            future = []
             for target in targets:
-                res = ping_target(target)
-                update_result(target, res, count)
+                future.append(
+                    executor.submit(ping_and_update_result, target, count))
             print_formated_result(result)
             time.sleep(interval)
             count += 1
@@ -362,7 +373,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     args = get_option()
-    debug = args.debug
+    Debug = args.debug
     interval = args.interval
     if args.target:
         targets = args.target
@@ -385,9 +396,8 @@ if __name__ == '__main__':
     new[3] &= ~termios.ECHO
 
     with ThreadPoolExecutor() as executor:
-        # future = []
-        # future.append(executor.submit(get_key_input, fd))
-        # future.append(executor.submit(ping_loop))
         executor.submit(get_key_input, fd)
-        executor.submit(ping_loop)
+        ping_loop(executor)
+
+    debug_printTimeDelta()
     print_formated_result(result, end=True)
