@@ -279,12 +279,6 @@ def get_formated_result_line(k, v, table):
 
 
 def print_formated_result(result, end=False):
-    # global RESET_RESULT_FLAG
-    # if RESET_RESULT_FLAG:
-    #     init_result()
-    #     RESET_RESULT_FLAG = False
-    #     return
-
     print_formated_header()
     total = calc_total(result)
     table = Table(show_header=True, header_style="bold magenta")
