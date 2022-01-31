@@ -21,7 +21,8 @@ PADDING = 1
 FLAG_RESET_RESULT = False
 FLAG_PING_LOOP_END = False
 pattern = '.*time=(.*)'
-COMMENT_OUT_PATTERN = '^[#|/].*'
+COMMENT_OUT_PATTERN = r'^[#|/].*'
+WHITESPACE_PATTERN = r"^\s*$"
 debug = ""
 result = {}
 max_targets_len = 0
@@ -49,9 +50,12 @@ def sort_uniq_target():
 
 def exept_comment_out_hosts():
     global targets
+    global WHITESPACE_PATTERN
+    global COMMENT_OUT_PATTERN
     temp_targets = []
     for i in targets:
-        if not re.match(COMMENT_OUT_PATTERN, i):
+        if ((not re.match(COMMENT_OUT_PATTERN, i)) and
+                (not re.match(WHITESPACE_PATTERN, i))):
             temp_targets.append(i)
     targets = temp_targets
 
