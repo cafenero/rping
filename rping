@@ -313,15 +313,19 @@ def check_target(filepath):
 def get_key_input(fd):
     global RESET_RESULT_FLAG
     global FLAG_PING_LOOP_END
+    global result
 
     try:
         while True:
             termios.tcsetattr(fd, termios.TCSANOW, new)
             ch = sys.stdin.read(1)
-            if ch == "R" or ch == "r":
+            if ch == "R":
                 clear_result()
                 # RESET_RESULT_FLAG = True
-            elif ch == "Q" or ch == "q":
+            elif ch == "r":
+                initClearScreen()
+                print_formated_result(result)
+            elif ch == "Q":
                 # future.cancelled()
                 FLAG_PING_LOOP_END = True
                 break
