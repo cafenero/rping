@@ -173,6 +173,7 @@ def update_result(t, res, count):
 
 
 def d_printTimeDelta():
+    global date_before
     if debug:
         date_now = datetime.now()
         print("Elapsed delta:", date_now - date_before, "[s]")
@@ -183,6 +184,7 @@ def print_formated_header():
     print("> count: " + str(count) + ' interval: '
           + str(interval) + " [sec], " + '{:.2f}'.format(1/interval)
           + " [ping/sec]")
+    print("> Key input: Q=End rping,  R=Reset counter,  r=Refresh screen")
 
 
 def calc_total(result):
