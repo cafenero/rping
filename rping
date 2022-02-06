@@ -4,7 +4,10 @@ import time
 import re
 import sys
 import os
+import signal
+import termios
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 import socket
 from socket import AF_INET, SOCK_DGRAM
 import ipaddress
@@ -15,14 +18,17 @@ from rich.table import Table
 
 CLEAR_LINE_NUME = 128
 PADDING = 1
+FLAG_RESET_RESULT = False
+FLAG_PING_LOOP_END = False
 pattern = '.*time=(.*)'
 COMMENT_OUT_PATTERN = '^[#|/].*'
-ndebug = ""
+debug = ""
 result = {}
 max_targets_len = 0
 targets = ""
 count = 1
 console = Console()
+date_before = ""
 
 
 def initClearScreen():
@@ -65,6 +71,18 @@ def init_result():
         result[target] = {"lastsec": 0, "avgsec": 0, "maxsec": 0.0,
                           "minsec": 0, "totalsec": 0, "succ": 0, "fail": 0,
                           "ipaddress": ipaddress}
+
+
+def clear_result():
+    global targets
+    for target in targets:
+        result[target]["lastsec"] = 0
+        result[target]["avgsec"] = 0
+        result[target]["maxsec"] = 0.0
+        result[target]["minsec"] = 0
+        result[target]["totalsec"] = 0
+        result[target]["succ"] = 0
+        result[target]["fail"] = 0
 
 
 def init_target_and_result():
@@ -209,7 +227,6 @@ def mod_sec_format_and_unit(sec):
             ret = ('%10.3f' % (sec * 1000 * 1000) +
                    "[cyan bold]ns[/cyan bold]")
         else:
-            print(res.stdout.decode("utf-8"))
             print(sec)
             print("sec unit error")
             exit(1)
@@ -244,7 +261,8 @@ def get_formated_result_line(k, v, table):
     )
 
 
-def print_formated_result(result):
+def print_formated_result(result, end=False):
+    print_formated_header()
     total = calc_total(result)
     table = Table(show_header=True, header_style="bold magenta")
     table.show_footer = True
@@ -259,7 +277,8 @@ def print_formated_result(result):
     for k, v in result.items():
         get_formated_result_line(k, v, table)
     console.print(table)
-    print("\033[100A", end="")
+    if not end:
+        print("\033[100A", end="")
 
 
 def print_help_exit():
@@ -289,7 +308,49 @@ def check_target(filepath):
         exit(1)
 
 
+def get_key_input(fd):
+    global RESET_RESULT_FLAG
+    global FLAG_PING_LOOP_END
+
+    try:
+        while True:
+            termios.tcsetattr(fd, termios.TCSANOW, new)
+            ch = sys.stdin.read(1)
+            if ch == "R" or ch == "r":
+                clear_result()
+                # RESET_RESULT_FLAG = True
+            elif ch == "Q" or ch == "q":
+                # future.cancelled()
+                FLAG_PING_LOOP_END = True
+                break
+            time.sleep(0.1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSANOW, old)
+
+
+def ping_loop():
+    count = 1
+    while True:
+        if FLAG_PING_LOOP_END:
+            break
+        # if debug:
+        #     print(args)
+        #     date_before = d_printTimeDelta()
+        try:
+            for target in targets:
+                res = ping_target(target)
+                update_result(target, res, count)
+            print_formated_result(result)
+            time.sleep(interval)
+            count += 1
+        except KeyboardInterrupt:
+            print("                ")
+            print("\033[10A", end="")
+
+
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     args = get_option()
     debug = args.debug
     interval = args.interval
@@ -302,29 +363,21 @@ if __name__ == '__main__':
         else:
             print("No valid filepath:", filepath)
             exit(1)
-    check_target(filepath)
+
+    check_target(targets)
     init_target_and_result()
     initClearScreen()
 
-    if debug:
-        date_before = datetime.now()
-    try:
-        while True:
-            if debug:
-                print(args)
-                date_before = d_printTimeDelta()
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    new = old.copy()
+    new[3] &= ~termios.ICANON
+    new[3] &= ~termios.ECHO
 
-            print_formated_header()
-            for target in targets:
-                res = ping_target(target)
-                update_result(target, res, count)
-            print_formated_result(result)
-
-            time.sleep(interval)
-            count += 1
-            # if count % 10 == 0:
-            #     initClearScreen()
-    except KeyboardInterrupt:
-        print("                ")
-        print("\033[10A", end="")
-        sys.exit()
+    with ThreadPoolExecutor() as executor:
+        # future = []
+        # future.append(executor.submit(get_key_input, fd))
+        # future.append(executor.submit(ping_loop))
+        executor.submit(get_key_input, fd)
+        executor.submit(ping_loop)
+    print_formated_result(result, end=True)
